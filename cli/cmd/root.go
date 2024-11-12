@@ -16,17 +16,20 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/gojue/ecapture/cli/cobrautl"
 	"github.com/gojue/ecapture/cli/http"
 	"github.com/gojue/ecapture/user/config"
 	"github.com/gojue/ecapture/user/module"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"io"
 	"net"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -151,7 +154,7 @@ func initLogger(addr string, modConfig config.IConfig) zerolog.Logger {
 	var logger zerolog.Logger
 	var err error
 	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-	logger = zerolog.New(consoleWriter).With().Timestamp().Logger()
+	logger = zerolog.New(consoleWriter).With().Timestamp().Caller().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if modConfig.GetDebug() {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
@@ -171,6 +174,40 @@ func initLogger(addr string, modConfig config.IConfig) zerolog.Logger {
 			f, err = os.Create(addr)
 			modConfig.SetAddrType(loggerTypeFile)
 			//modConfig.SetLoggerTCPAddr("")
+			writer = f
+		}
+		if err == nil && writer != nil {
+			multi := zerolog.MultiLevelWriter(consoleWriter, writer)
+			logger = zerolog.New(multi).With().Timestamp().Logger()
+		} else {
+			logger.Warn().Err(err).Msg("failed to create multiLogger")
+		}
+	}
+	return logger
+}
+
+func initGlobalLogger(addr string, globalConfig config.BaseConfig) zerolog.Logger {
+	var logger zerolog.Logger
+	var err error
+	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	logger = zerolog.New(consoleWriter).With().Timestamp().Caller().Logger()
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if globalConfig.GetDebug() {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	if addr != "" {
+		var writer io.Writer
+		var address string
+		if strings.Contains(addr, "tcp://") {
+			address = strings.Replace(addr, "tcp://", "", 1)
+			var conn net.Conn
+			conn, err = net.Dial("tcp", address)
+			globalConfig.SetAddrType(loggerTypeTcp)
+			writer = conn
+		} else {
+			var f *os.File
+			f, err = os.Create(addr)
+			globalConfig.SetAddrType(loggerTypeFile)
 			writer = f
 		}
 		if err == nil && writer != nil {
@@ -237,7 +274,7 @@ func runModule(modName string, modConfig config.IConfig) {
 	reload:
 		// 初始化
 		logger.Warn().Msg("========== module starting. ==========")
-		mod := modFunc()
+		mod := modFunc(modName)
 		ctx, cancelFun := context.WithCancel(context.TODO())
 		err = mod.Init(ctx, &logger, modConfig, ecw)
 		if err != nil {
@@ -289,4 +326,137 @@ func runModule(modName string, modConfig config.IConfig) {
 	// TODO Stop http server
 
 	logger.Info().Msg("bye bye.")
+}
+
+func runAllModule(modMaps map[string]config.IConfig, logger zerolog.Logger) {
+	var err error
+	var reRloadConfig = make(chan config.IConfig, 10)
+	var globalStopCh = make(chan struct{})
+	var wg sync.WaitGroup
+
+	modMapsJSON, err := json.Marshal(modMaps)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to serialize modMaps")
+		return
+	}
+
+	// init eCapture
+	logger.Info().Str("AppName", fmt.Sprintf("%s(%s)", CliName, CliNameZh)).Send()
+	logger.Info().Str("HomePage", CliHomepage).Send()
+	logger.Info().Str("Repository", CliRepo).Send()
+	logger.Info().Str("Author", CliAuthor).Send()
+	logger.Info().Str("Description", CliDescription).Send()
+	logger.Info().Str("Version", GitVersion).Send()
+
+	logger.Info().Str("Listen", globalConf.Listen).Send()
+	logger.Info().Str("logger", globalConf.LoggerAddr).Msg("eCapture running logs")
+	logger.Info().Str("eventCollector", globalConf.EventCollectorAddr).Msg("the file handler that receives the captured event")
+	logger.Info().RawJSON("modMaps", modMapsJSON).Msg("Loaded module configurations")
+
+	// listen http server
+	go func() {
+		logger.Info().Str("listen", globalConf.Listen).Send()
+		logger.Info().Msg("https server starting...You can update the configuration file via the HTTP interface.")
+		var ec = http.NewHttpServer(globalConf.Listen, reRloadConfig, logger)
+		err = ec.Run()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("http server start failed")
+			return
+		}
+	}()
+
+	for modName, modConfig := range modMaps {
+		wg.Add(1)
+		go runSingleModule(modName, modConfig, logger, reRloadConfig, globalStopCh, &wg)
+	}
+
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, os.Interrupt, syscall.SIGTERM)
+	<-sigterm
+	logger.Info().Msg("Received SIGTERM, shutting down...")
+	close(globalStopCh)
+
+	// 等待所有模块清理完成
+	wg.Wait()
+	logger.Info().Msg("All modules have exited. Shutting down main thread.")
+}
+
+// runSingleModule run single module
+func runSingleModule(modName string, modConfig config.IConfig, logger zerolog.Logger, reRloadConfig chan config.IConfig, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var err error
+	setModConfig(globalConf, modConfig)
+	var eventCollector zerolog.Logger
+	if globalConf.EventCollectorAddr == "" {
+		eventCollector = logger
+	} else {
+		eventCollector = initLogger(globalConf.EventCollectorAddr, modConfig)
+	}
+	var ecw = eventCollectorWriter{logger: &eventCollector}
+	var isReload bool
+
+	// run module
+	{
+		// config check
+		err = modConfig.Check()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("config check failed")
+		}
+		modFunc := module.GetModuleFunc(modName)
+		if modFunc == nil {
+			logger.Fatal().Err(fmt.Errorf("cant found module function: %s", modName)).Send()
+		}
+
+	reload:
+		// 初始化
+		logger.Warn().Msg("========== module starting. ==========")
+		mod := modFunc(modName)
+		ctx, cancelFun := context.WithCancel(context.TODO())
+		err = mod.Init(ctx, &logger, modConfig, ecw)
+		if err != nil {
+			logger.Fatal().Err(err).Bool("isReload", isReload).Msg("module initialization failed")
+		}
+		logger.Info().Str("moduleName", modName).Bool("isReload", isReload).Msg("module initialization.")
+
+		err = mod.Run()
+		if err != nil {
+			logger.Fatal().Err(err).Bool("isReload", isReload).Msg("module run failed, skip it.")
+		}
+		logger.Info().Str("moduleName", modName).Bool("isReload", isReload).Msg("module started successfully.")
+
+		// reset isReload
+		isReload = false
+		select {
+		case _, ok := <-stopCh:
+			if !ok {
+				logger.Warn().Msg("reload stopper channel closed.")
+				break
+			}
+			isReload = false
+		case rc, ok := <-reRloadConfig:
+			if !ok {
+				logger.Warn().Msg("reload config channel closed.")
+				isReload = false
+				break
+			}
+			logger.Warn().Msg("========== Signal received; the module will initiate a restart. ==========")
+			isReload = true
+			modConfig = rc
+		}
+		cancelFun()
+		// clean up
+		err = mod.Close()
+		if err != nil {
+			logger.Warn().Err(err).Msg("module close failed")
+		}
+		// reload
+		if isReload {
+			isReload = false
+			logger.Info().RawJSON("config", modConfig.Bytes()).Msg("reloading module...")
+			goto reload
+		}
+	}
+
+	logger.Info().Str("moduleName", modName).Msg("bye bye.")
 }

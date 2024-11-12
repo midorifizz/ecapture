@@ -70,6 +70,24 @@ type BaseConfig struct {
 	EventCollectorAddr string `json:"event_collector_addr"` // the server address that receives the captured event
 }
 
+type EbpfProgSpec struct {
+	Section      string `json:"section"`
+	EbpfFuncName string `json:"ebpf_func_name"`
+	AttachTo     string `json:"attach_to"`
+	BinaryPath   string `json:"binary_path"`
+}
+
+type EbpfMapSpec struct {
+	Name   string     `json:"name"`
+	Fields []MapField `json:"fields"`
+}
+
+type MapField struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Size int    `json:"size,omitempty"` // 对于字节数组，定义其大小
+}
+
 func (c *BaseConfig) GetPid() uint64 {
 	return c.Pid
 }

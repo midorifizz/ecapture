@@ -14,6 +14,8 @@
 
 package event
 
+import "github.com/gojue/ecapture/user/config"
+
 type EventType uint8
 
 const (
@@ -28,7 +30,7 @@ const (
 )
 
 type IEventStruct interface {
-	Decode(payload []byte) (err error)
+	Decode(payload []byte, conf config.IConfig) (err error)
 	Payload() []byte
 	PayloadLen() int
 	String() string

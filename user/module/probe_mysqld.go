@@ -236,12 +236,12 @@ func (m *MMysqldProbe) Events() []*ebpf.Map {
 }
 
 func init() {
-	RegisteFunc(NewMysqldProbe)
+	RegisteFunc(ModuleNameMysqld, NewMysqldProbe)
 }
 
-func NewMysqldProbe() IModule {
+func NewMysqldProbe(name string) IModule {
 	mod := &MMysqldProbe{}
-	mod.name = ModuleNameMysqld
+	mod.name = name
 	mod.mType = ProbeTypeUprobe
 	return mod
 }

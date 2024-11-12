@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/gojue/ecapture/user/config"
 
 	"golang.org/x/sys/unix"
 )
@@ -65,16 +66,16 @@ func (d dispatch_command_return) String() string {
 
 type MysqldEvent struct {
 	eventType EventType
-	Pid       uint64                   `json:"pid"`
-	Timestamp uint64                   `json:"timestamp"`
-	Query     [MysqldMaxDataSize]uint8 `json:"Query"`
-	Alllen    uint64                   `json:"Alllen"`
-	Len       uint64                   `json:"Len"`
-	Comm      [16]uint8                `json:"Comm"`
-	Retval    dispatch_command_return  `json:"retval"`
+	Pid       uint64                  `json:"pid"`
+	Timestamp uint64                  `json:"timestamp"`
+	Query     [MysqldMaxDataSize]byte `json:"Query"`
+	Alllen    uint64                  `json:"Alllen"`
+	Len       uint64                  `json:"Len"`
+	Comm      [16]byte                `json:"Comm"`
+	Retval    dispatch_command_return `json:"retval"`
 }
 
-func (me *MysqldEvent) Decode(payload []byte) (err error) {
+func (me *MysqldEvent) Decode(payload []byte, conf config.IConfig) (err error) {
 	buf := bytes.NewBuffer(payload)
 	if err = binary.Read(buf, binary.LittleEndian, &me.Pid); err != nil {
 		return

@@ -356,7 +356,7 @@ func (m *Module) Decode(em *ebpf.Map, b []byte) (event event.IEventStruct, err e
 	}
 
 	te := es.Clone()
-	err = te.Decode(b)
+	err = te.Decode(b, m.conf)
 	if err != nil {
 		return nil, err
 	}

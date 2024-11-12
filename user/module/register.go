@@ -18,15 +18,14 @@ import (
 	"fmt"
 )
 
-var newModule = make(map[string]func() IModule)
+var newModule = make(map[string]func(name string) IModule)
 
 // RegisteFunc register module function
-func RegisteFunc(f func() IModule) {
-	p := f()
+func RegisteFunc(name string, f func(name string) IModule) {
+	p := f(name)
 	if p == nil {
 		panic("function register probe is nil")
 	}
-	name := p.Name()
 	if _, dup := newModule[name]; dup {
 		panic(fmt.Sprintf("function register called twice for probe %s", name))
 	}
@@ -34,7 +33,7 @@ func RegisteFunc(f func() IModule) {
 }
 
 // GetModuleFunc get module function by name
-func GetModuleFunc(name string) func() IModule {
+func GetModuleFunc(name string) func(name string) IModule {
 	f, ok := newModule[name]
 	if !ok {
 		return nil
