@@ -40,11 +40,13 @@ type ProbeYAML struct {
 }
 
 type Prog struct {
-	Name       string `yaml:"name"`
-	Type       string `yaml:"type"`
-	Section    string `yaml:"section"`
-	AttachTo   string `yaml:"attach_to"`
-	BinaryPath string `yaml:"binary_path"`
+	Name            string `yaml:"name"`
+	Type            string `yaml:"type"`
+	Section         string `yaml:"section"`
+	AttachFunc      string `yaml:"attach_func"`
+	AttachMatchFunc string `yaml:"attach_match_func"`
+	AttachOffset    uint64 `yaml:"attach_offset"`
+	BinaryPath      string `yaml:"binary_path"`
 }
 
 type Map struct {
@@ -55,7 +57,7 @@ type Map struct {
 type Field struct {
 	Name string `yaml:"name"`
 	Type string `yaml:"type"`
-	Size int    `yaml:"size,omitempty"`
+	Size int    `yaml:"size"`
 }
 
 // findEbpfObjectFile 查找目录中 .o 结尾的文件
@@ -72,7 +74,7 @@ func findEbpfObjectFile(probeDir string) (string, error) {
 	//}
 	//
 	//return "", fmt.Errorf("no .o file found in directory: %s", probeDir)
-	return "mysqld_kern_noncore_less52.o", nil
+	return "user/bytecode/mysqld_kern.o", nil
 }
 
 // loadProbeConfig 读取和解析 probe.yaml 文件
@@ -106,15 +108,19 @@ func loadProbeConfig(probeDir string, logger *zerolog.Logger) (*config.UprobeCon
 	// 解析 progs 部分
 	for _, prog := range probeYAML.Progs {
 		uprobeConfig.EbpfProgSpecs = append(uprobeConfig.EbpfProgSpecs, config.EbpfProgSpec{
-			Section:      prog.Section,
-			EbpfFuncName: prog.Name,
-			AttachTo:     prog.AttachTo,
-			BinaryPath:   prog.BinaryPath,
+			Section:         prog.Section,
+			EbpfFuncName:    prog.Name,
+			AttachFunc:      prog.AttachFunc,
+			AttachMatchFunc: prog.AttachMatchFunc,
+			AttachOffset:    prog.AttachOffset,
+			BinaryPath:      prog.BinaryPath,
 		})
 		logger.Info().Str("EbpfFileName", ebpfFileName).
 			Str("Section", prog.Section).
 			Str("EbpfFuncName", prog.Name).
-			Str("AttachTo", prog.AttachTo).
+			Str("AttachFunc", prog.AttachFunc).
+			Str("AttachMatchFunc", prog.AttachMatchFunc).
+			Uint64("AttachOffset", prog.AttachOffset).
 			Str("BinaryPath", prog.BinaryPath).Msg("EbpfProgSpecs init finish.")
 	}
 

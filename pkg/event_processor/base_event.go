@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/gojue/ecapture/user/config"
 	"github.com/gojue/ecapture/user/event"
 )
 
@@ -87,7 +88,7 @@ type BaseEvent struct {
 	Version   int32
 }
 
-func (be *BaseEvent) Decode(payload []byte) (err error) {
+func (be *BaseEvent) Decode(payload []byte, conf config.IConfig) (err error) {
 	buf := bytes.NewBuffer(payload)
 	if err = binary.Read(buf, binary.LittleEndian, &be.DataType); err != nil {
 		return

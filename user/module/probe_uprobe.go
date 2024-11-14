@@ -98,6 +98,7 @@ func (m *Uprobe) setupManagers() error {
 			Section:          pspec.Section,
 			EbpfFuncName:     pspec.EbpfFuncName,
 			AttachToFuncName: pspec.AttachTo,
+			UAddress:         pspec.AttachOffset,
 			BinaryPath:       pspec.BinaryPath,
 		}
 
@@ -106,6 +107,7 @@ func (m *Uprobe) setupManagers() error {
 			Str("binaryPath", pspec.BinaryPath).
 			Str("attachTo", pspec.AttachTo).
 			Str("ebpfFuncName", pspec.EbpfFuncName).
+			Uint64("uprobeOffset", pspec.AttachOffset).
 			Msg("Uprobe eBPF prog setup")
 	}
 

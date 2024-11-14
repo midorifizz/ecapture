@@ -71,10 +71,13 @@ type BaseConfig struct {
 }
 
 type EbpfProgSpec struct {
-	Section      string `json:"section"`
-	EbpfFuncName string `json:"ebpf_func_name"`
-	AttachTo     string `json:"attach_to"`
-	BinaryPath   string `json:"binary_path"`
+	Section         string `json:"section"`
+	EbpfFuncName    string `json:"ebpf_func_name"`
+	AttachFunc      string `json:"attach_func"`
+	AttachMatchFunc string `json:"attach_match_func"`
+	AttachOffset    uint64 `json:"attach_offset"`
+	AttachTo        string `json:"attach_to"`
+	BinaryPath      string `json:"binary_path"`
 }
 
 type EbpfMapSpec struct {

@@ -3,7 +3,10 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	manager "github.com/gojue/ebpfmanager"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -22,15 +25,43 @@ func NewUprobeConfig() *UprobeConfig {
 
 func (conf *UprobeConfig) Check() error {
 
-	for _, spec := range conf.EbpfProgSpecs {
+	for idx, spec := range conf.EbpfProgSpecs {
+		// 检查程序二进制文件是否存在
 		if spec.BinaryPath == "" || len(strings.TrimSpace(spec.BinaryPath)) <= 0 {
-			return errors.New("Uprobe binary path cant be null.")
+			return errors.New("uprobe binary path cant be null")
 		}
 
 		_, e := os.Stat(spec.BinaryPath)
 		if e != nil {
 			return e
 		}
+
+		// 如果配置 Offset ，则使用用户指定的 Offset
+		if spec.AttachOffset != 0 {
+			conf.EbpfProgSpecs[idx].AttachTo = "[_IGNORE_]"
+			return nil
+		}
+
+		// 找到与提供的 pattern 匹配的第一个符号的 Offset
+		var funcPattern string
+		if len(spec.AttachMatchFunc) > 0 {
+			funcPattern = spec.AttachMatchFunc
+		} else {
+			funcPattern = fmt.Sprintf("^%s$", spec.AttachFunc)
+		}
+		pattern, err := regexp.Compile(funcPattern)
+		if err != nil {
+			return fmt.Errorf("failed to compile pattern %s: %w", funcPattern, err)
+		}
+
+		// 检索动态符号偏移量
+		offsets, err := manager.FindSymbolOffsets(spec.BinaryPath, pattern)
+		if err != nil {
+			return fmt.Errorf("couldn't find symbol matching %s in %s: %w", pattern.String(), spec.BinaryPath, err)
+		}
+
+		conf.EbpfProgSpecs[idx].AttachTo = offsets[0].Name
+		conf.EbpfProgSpecs[idx].AttachOffset = offsets[0].Value
 	}
 
 	return nil

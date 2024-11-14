@@ -3,8 +3,10 @@ package event
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"github.com/gojue/ecapture/user/config"
+	"strings"
 )
 
 type GenericEvent struct {
@@ -47,18 +49,22 @@ func (event *GenericEvent) Decode(payload []byte, conf config.IConfig) (err erro
 				if err = binary.Read(buf, binary.LittleEndian, &array); err != nil {
 					return err
 				}
-				event.DataMap[field.Name] = array
+				event.DataMap[field.Name] = strings.TrimRight(string(array), "\x00")
 			default:
 				return fmt.Errorf("unsupported type: %s", field.Type)
 			}
 		}
 	}
+	dataBytes, err := json.Marshal(event.DataMap)
+	if err != nil {
+		return err
+	}
+	event.DataBytes = dataBytes
 	return nil
 }
 
 func (event *GenericEvent) String() string {
-	s := fmt.Sprintf("PID:%d, UID:%d, \tComm:%s,", event.Pid, event.Uid, event.Comm)
-	return s
+	return string(event.DataBytes)
 }
 
 func (event *GenericEvent) StringHex() string {
