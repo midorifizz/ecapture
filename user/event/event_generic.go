@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/gojue/ecapture/user/config"
@@ -21,7 +22,7 @@ type GenericEvent struct {
 
 func (event *GenericEvent) Decode(payload []byte, conf config.IConfig) (err error) {
 	buf := bytes.NewBuffer(payload)
-	specs := conf.(*config.UprobeConfig).EbpfMapSpecs
+	specs := conf.(*config.GenericProbeConfig).EbpfMapSpecs
 
 	for _, spec := range specs {
 		for _, field := range spec.Fields {
@@ -68,8 +69,7 @@ func (event *GenericEvent) String() string {
 }
 
 func (event *GenericEvent) StringHex() string {
-	s := fmt.Sprintf("Hex, PID:%d, UID:%d, \tComm:%s,", event.Pid, event.Uid, event.Comm)
-	return s
+	return hex.EncodeToString(event.DataBytes)
 }
 
 func (event *GenericEvent) Clone() IEventStruct {
