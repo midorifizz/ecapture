@@ -1,0 +1,19 @@
+progs:
+  - name: kprobe_do_sys_open  # 触发函数名
+    type: kprobe  # 探针类型
+    section: kprobe/do_sys_open
+    attach_func: do_sys_open
+
+maps:
+  - name: open_events
+    fields:
+      - name: pid
+        type: uint64
+      - name: timestamp
+        type: uint64
+      - name: comm
+        type: byte_array
+        size: 16
+      - name: filename
+        type: byte_array
+        size: 20

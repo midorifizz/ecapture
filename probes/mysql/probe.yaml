@@ -1,0 +1,31 @@
+progs:
+  - name: mysql56_query  # 触发函数名
+    type: uprobe  # 探针类型
+    section: uprobe/dispatch_command
+    attach_match_func: '\w+dispatch_command\w+'
+    binary_path: /usr/libexec/mysqld  # 挂载程序二进制文件路径（uprobe 必须声明）
+  - name: mysql56_query_return  # 触发函数名
+    type: uretprobe  # 探针类型
+    section: uretprobe/dispatch_command
+    attach_match_func: '\w+dispatch_command\w+'
+    binary_path: /usr/libexec/mysqld  # 挂载程序二进制文件路径（uprobe 必须声明）
+
+maps:
+  - name: events
+    fields:
+      - name: pid
+        type: uint64
+      - name: timestamp
+        type: uint64
+      - name: query
+        type: byte_array
+        size: 256
+      - name: alllen
+        type: uint64
+      - name: len
+        type: uint64
+      - name: comm
+        type: byte_array
+        size: 16
+      - name: retval
+        type: int8
