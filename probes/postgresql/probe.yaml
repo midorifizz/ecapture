@@ -1,0 +1,32 @@
+progs:
+  - name: bpf_table_open  # 触发函数名
+    type: uprobe  # 探针类型
+    section: uprobe/table_open
+    attach_func: 'table_open'
+    binary_path: /usr/pgsql-14/bin/postgres  # 挂载程序二进制文件路径（uprobe 必须声明）
+
+maps:
+  - name: lockevents
+    fields:
+      - name: pid
+        type: uint64
+      - name: timestamp
+        type: uint64
+      - name: event_type
+        type: uint32
+      - name: object
+        type: uint32
+      - name: mode
+        type: int32
+      - name: requested
+        type: uint32
+      - name: lock_local_hold
+        type: int64
+      - name: payload_str1
+        type: byte_array
+        size: 127
+      - name: payload_str2
+        type: byte_array
+        size: 127
+      - name: stackid
+        type: int32

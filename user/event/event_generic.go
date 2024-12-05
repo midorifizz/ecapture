@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gojue/ecapture/user/config"
+	"github.com/rs/zerolog/log"
 	"strings"
 )
 
@@ -22,13 +23,36 @@ type GenericEvent struct {
 
 func (event *GenericEvent) Decode(payload []byte, conf config.IConfig) (err error) {
 	buf := bytes.NewBuffer(payload)
-	specs := conf.(*config.GenericProbeConfig).EbpfMapSpecs
+	probeConf := conf.(*config.GenericProbeConfig)
+	specs := probeConf.EbpfMapSpecs
 
 	for _, spec := range specs {
 		for _, field := range spec.Fields {
 			switch field.Type {
 			case "uint64":
 				var value uint64
+				if err = binary.Read(buf, binary.LittleEndian, &value); err != nil {
+					return err
+				}
+				if field.Name == "timestamp" {
+					decodedKtime, err := DecodeKtime(int64(value), true)
+					if err == nil {
+						event.DataMap[field.Name] = decodedKtime
+					} else {
+						log.Error().Err(err).Msg("DecodeKtime failed")
+						event.DataMap[field.Name] = value
+					}
+				} else {
+					event.DataMap[field.Name] = value
+				}
+			case "int", "int32":
+				var value int32
+				if err = binary.Read(buf, binary.LittleEndian, &value); err != nil {
+					return err
+				}
+				event.DataMap[field.Name] = value
+			case "int64":
+				var value int64
 				if err = binary.Read(buf, binary.LittleEndian, &value); err != nil {
 					return err
 				}
@@ -52,7 +76,7 @@ func (event *GenericEvent) Decode(payload []byte, conf config.IConfig) (err erro
 				}
 				event.DataMap[field.Name] = strings.TrimRight(string(array), "\x00")
 			default:
-				return fmt.Errorf("unsupported type: %s", field.Type)
+				return fmt.Errorf("[%s] field %s unsupported type: %s", probeConf.EbpfFileName, field.Name, field.Type)
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package module
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gojue/ecapture/user/config"
 
@@ -57,8 +58,10 @@ func findEbpfObjectFile(probeDir string) (string, error) {
 	dirName := filepath.Base(probeDir)
 	if dirName == "mysql" {
 		return "user/bytecode/mysqld_kern.o", nil
+	} else if dirName == "postgresql" {
+		return "user/bytecode/postgresql_kern.o", nil
 	} else {
-		return "user/bytecode/openfile_kern.o", nil
+		return "", errors.New("not found eBPF object file")
 	}
 }
 
